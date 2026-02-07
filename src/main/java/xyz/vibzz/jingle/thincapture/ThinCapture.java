@@ -13,6 +13,7 @@ import xyz.vibzz.jingle.thincapture.config.BackgroundConfig;
 import xyz.vibzz.jingle.thincapture.config.CaptureConfig;
 import xyz.vibzz.jingle.thincapture.frame.BackgroundFrame;
 import xyz.vibzz.jingle.thincapture.frame.CaptureFrame;
+import xyz.vibzz.jingle.thincapture.ui.EyeSeeBackgroundPluginPanel;
 import xyz.vibzz.jingle.thincapture.ui.ThinCapturePluginPanel;
 
 import java.awt.*;
@@ -27,9 +28,15 @@ import java.util.concurrent.ScheduledExecutorService;
 public class ThinCapture {
     public static final ScheduledExecutorService EXECUTOR = Executors.newSingleThreadScheduledExecutor();
     private static ThinCaptureOptions options = null;
+
+    // Thin BT frames
     private static final List<CaptureFrame> frames = new ArrayList<>();
     private static final List<BackgroundFrame> bgFrames = new ArrayList<>();
-    private static boolean capturesShowing = false;
+    private static boolean thinBTShowing = false;
+
+    // EyeSee frames
+    private static final List<BackgroundFrame> eyeSeeBgFrames = new ArrayList<>();
+    private static boolean eyeSeeShowing = false;
 
     public static ThinCaptureOptions getOptions() {
         return options;
@@ -37,6 +44,10 @@ public class ThinCapture {
 
     public static List<BackgroundFrame> getBgFrames() {
         return bgFrames;
+    }
+
+    public static List<BackgroundFrame> getEyeSeeBgFrames() {
+        return eyeSeeBgFrames;
     }
 
     public static void main(String[] args) throws IOException {
@@ -54,10 +65,10 @@ public class ThinCapture {
             Jingle.log(Level.ERROR, "Failed to load ThinCapture options, using defaults.");
         }
 
+        // Initialize Thin BT frames
         for (CaptureConfig config : options.captures) {
             frames.add(new CaptureFrame(config.name));
         }
-
         for (BackgroundConfig bg : options.backgrounds) {
             BackgroundFrame frame = new BackgroundFrame();
             if (bg.imagePath != null && !bg.imagePath.trim().isEmpty()) {
@@ -66,14 +77,32 @@ public class ThinCapture {
             bgFrames.add(frame);
         }
 
-        ThinCapturePluginPanel pluginPanel = new ThinCapturePluginPanel();
-        JingleGUI.addPluginTab("Thin BT Captures", pluginPanel.mainPanel, pluginPanel::onSwitchTo);
+        // Initialize EyeSee frames
+        for (BackgroundConfig bg : options.eyeSeeBackgrounds) {
+            BackgroundFrame frame = new BackgroundFrame();
+            if (bg.imagePath != null && !bg.imagePath.trim().isEmpty()) {
+                frame.loadImage(bg.imagePath);
+            }
+            eyeSeeBgFrames.add(frame);
+        }
 
+        // Add plugin tabs
+        ThinCapturePluginPanel thinPanel = new ThinCapturePluginPanel();
+        JingleGUI.addPluginTab("ThinCapture", thinPanel.mainPanel, thinPanel::onSwitchTo);
+
+        EyeSeeBackgroundPluginPanel eyeSeePanel = new EyeSeeBackgroundPluginPanel();
+        JingleGUI.addPluginTab("EyeSee Background", eyeSeePanel.mainPanel, eyeSeePanel::onSwitchTo);
+
+        // Register events
         PluginEvents.START_TICK.register(ThinCapture::detectThinBT);
+        PluginEvents.SHOW_PROJECTOR.register(ThinCapture::showEyeSeeCaptures);
+        PluginEvents.DUMP_PROJECTOR.register(ThinCapture::hideEyeSeeCaptures);
         PluginEvents.STOP.register(ThinCapture::stop);
 
-        Jingle.log(Level.INFO, "ThinCapture Plugin Initialized (" + options.captures.size() + " captures, " + options.backgrounds.size() + " backgrounds)");
+        Jingle.log(Level.INFO, "ThinCapture Plugin Initialized (" + options.captures.size() + " thin captures, " + options.eyeSeeBackgrounds.size() + " eyesee backgrounds)");
     }
+
+    // ===== Thin BT Methods =====
 
     public static void addCapture(String name) {
         options.captures.add(new CaptureConfig(name));
@@ -119,10 +148,39 @@ public class ThinCapture {
         return bgFrames.get(index);
     }
 
+    // ===== EyeSee Methods =====
+
+    public static void addEyeSeeBackground(String name) {
+        BackgroundConfig config = new BackgroundConfig(name);
+        config.enabled = true;
+        options.eyeSeeBackgrounds.add(config);
+        eyeSeeBgFrames.add(new BackgroundFrame());
+    }
+
+    public static void removeEyeSeeBackground(int index) {
+        if (index < 0 || index >= options.eyeSeeBackgrounds.size()) return;
+        options.eyeSeeBackgrounds.remove(index);
+        BackgroundFrame frame = eyeSeeBgFrames.remove(index);
+        if (frame.isShowing()) frame.hideBackground();
+        frame.dispose();
+    }
+
+    public static void renameEyeSeeBackground(int index, String newName) {
+        if (index < 0 || index >= options.eyeSeeBackgrounds.size()) return;
+        options.eyeSeeBackgrounds.get(index).name = newName;
+    }
+
+    public static BackgroundFrame getEyeSeeBgFrame(int index) {
+        if (index < 0 || index >= eyeSeeBgFrames.size()) return null;
+        return eyeSeeBgFrames.get(index);
+    }
+
+    // ===== Thin BT Detection =====
+
     private static void detectThinBT() {
         try {
             if (!Jingle.getMainInstance().isPresent()) {
-                if (capturesShowing) hideCaptureWindows();
+                if (thinBTShowing) hideThinBTCaptures();
                 return;
             }
 
@@ -134,23 +192,21 @@ public class ThinCapture {
 
             boolean isThinBT = (w == options.thinBTWidth && h == options.thinBTHeight);
 
-            if (isThinBT && !capturesShowing) {
-                showCaptureWindows();
-            } else if (!isThinBT && capturesShowing) {
-                hideCaptureWindows();
+            if (isThinBT && !thinBTShowing) {
+                showThinBTCaptures();
+            } else if (!isThinBT && thinBTShowing) {
+                hideThinBTCaptures();
             } else if (isThinBT) {
                 for (BackgroundFrame bf : bgFrames) {
                     if (bf.isShowing()) bf.sendBehindMC();
                 }
             }
-        } catch (Exception ignored) {
-        }
+        } catch (Exception ignored) {}
     }
 
-    private static void showCaptureWindows() {
-        capturesShowing = true;
+    private static void showThinBTCaptures() {
+        thinBTShowing = true;
 
-        // Phase 1: Position everything
         for (int i = 0; i < options.backgrounds.size() && i < bgFrames.size(); i++) {
             BackgroundConfig bg = options.backgrounds.get(i);
             BackgroundFrame bf = bgFrames.get(i);
@@ -173,7 +229,6 @@ public class ThinCapture {
             }
         }
 
-        // Phase 2: Show everything
         for (int i = 0; i < options.backgrounds.size() && i < bgFrames.size(); i++) {
             BackgroundConfig bg = options.backgrounds.get(i);
             BackgroundFrame bf = bgFrames.get(i);
@@ -186,8 +241,8 @@ public class ThinCapture {
         }
     }
 
-    private static void hideCaptureWindows() {
-        capturesShowing = false;
+    private static void hideThinBTCaptures() {
+        thinBTShowing = false;
         for (BackgroundFrame bf : bgFrames) {
             if (bf.isShowing()) bf.hideBackground();
         }
@@ -195,6 +250,35 @@ public class ThinCapture {
             if (f.isShowing()) f.hideCapture();
         }
     }
+
+    // ===== EyeSee Show/Hide =====
+
+    private static void showEyeSeeCaptures() {
+        if (!options.eyeSeeEnabled) return;
+        if (!Jingle.getMainInstance().isPresent()) return;
+
+        eyeSeeShowing = true;
+
+        for (int i = 0; i < options.eyeSeeBackgrounds.size() && i < eyeSeeBgFrames.size(); i++) {
+            BackgroundConfig bg = options.eyeSeeBackgrounds.get(i);
+            BackgroundFrame bf = eyeSeeBgFrames.get(i);
+            if (bg.enabled && bg.imagePath != null && !bg.imagePath.trim().isEmpty()) {
+                bf.positionBackground(bg.x, bg.y, bg.width, bg.height);
+                bf.showBackground();
+            }
+        }
+    }
+
+    private static void hideEyeSeeCaptures() {
+        if (!options.eyeSeeEnabled) return;
+
+        eyeSeeShowing = false;
+        for (BackgroundFrame bf : eyeSeeBgFrames) {
+            if (bf.isShowing()) bf.hideBackground();
+        }
+    }
+
+    // ===== Utilities =====
 
     private static Color parseColor(String hex) {
         try {
@@ -213,12 +297,9 @@ public class ThinCapture {
 
     private static void stop() {
         EXECUTOR.shutdown();
-        for (CaptureFrame f : frames) {
-            f.dispose();
-        }
-        for (BackgroundFrame bf : bgFrames) {
-            bf.dispose();
-        }
+        for (CaptureFrame f : frames) f.dispose();
+        for (BackgroundFrame bf : bgFrames) bf.dispose();
+        for (BackgroundFrame bf : eyeSeeBgFrames) bf.dispose();
         if (options != null) if (!options.trySave()) Jingle.log(Level.ERROR, "Failed to save ThinCapture options!");
     }
 }

@@ -17,11 +17,16 @@ public class ThinCaptureOptions {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Path OPTIONS_PATH = Jingle.FOLDER.resolve("thincapture.json");
 
+    // Thin BT settings
     public int thinBTWidth = 280;
     public int thinBTHeight = 1000;
     public int fpsLimit = 30;
     public List<CaptureConfig> captures = new ArrayList<>();
     public List<BackgroundConfig> backgrounds = new ArrayList<>();
+
+    // EyeSee settings
+    public boolean eyeSeeEnabled = false;
+    public List<BackgroundConfig> eyeSeeBackgrounds = new ArrayList<>();
 
     public static Optional<ThinCaptureOptions> load() {
         if (!Files.exists(OPTIONS_PATH)) return Optional.of(new ThinCaptureOptions());
