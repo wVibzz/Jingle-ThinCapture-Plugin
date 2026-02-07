@@ -1,0 +1,6 @@
+{
+  "name": "ThinCapture",
+  "id": "thincapture",
+  "version": "${version}",
+  "initializer": "xyz.vibzz.jingle.thincapture.ThinCapture::initialize"
+}
