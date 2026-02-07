@@ -202,18 +202,25 @@ public class ThinCapturePluginPanel {
             ThinCapture.getBackgroundFrame().loadImage(o.bgImagePath);
         });
 
-        JPanel posRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        JPanel posRow = new JPanel(new BorderLayout());
         posRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
         posRow.setAlignmentX(Component.LEFT_ALIGNMENT);
-        posRow.add(new JLabel("X:"));
-        posRow.add(bgXField);
-        posRow.add(new JLabel("Y:"));
-        posRow.add(bgYField);
-        posRow.add(new JLabel("Width:"));
-        posRow.add(bgWField);
-        posRow.add(new JLabel("Height:"));
-        posRow.add(bgHField);
-        posRow.add(applyBtn);
+
+        JPanel posRowLeft = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        posRowLeft.add(new JLabel("X:"));
+        posRowLeft.add(bgXField);
+        posRowLeft.add(new JLabel("Y:"));
+        posRowLeft.add(bgYField);
+        posRowLeft.add(new JLabel("Width:"));
+        posRowLeft.add(bgWField);
+        posRowLeft.add(new JLabel("Height:"));
+        posRowLeft.add(bgHField);
+
+        JPanel posRowRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+        posRowRight.add(applyBtn);
+
+        posRow.add(posRowLeft, BorderLayout.WEST);
+        posRow.add(posRowRight, BorderLayout.EAST);
         section.add(posRow);
 
         return section;
