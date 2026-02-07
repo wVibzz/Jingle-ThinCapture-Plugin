@@ -67,7 +67,7 @@ public class ThinCapture {
         }
 
         ThinCapturePluginPanel pluginPanel = new ThinCapturePluginPanel();
-        JingleGUI.addPluginTab("Thin Captures", pluginPanel.mainPanel, pluginPanel::onSwitchTo);
+        JingleGUI.addPluginTab("Thin BT Captures", pluginPanel.mainPanel, pluginPanel::onSwitchTo);
 
         PluginEvents.START_TICK.register(ThinCapture::detectThinBT);
         PluginEvents.STOP.register(ThinCapture::stop);
