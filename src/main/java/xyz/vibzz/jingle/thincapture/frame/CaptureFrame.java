@@ -1,4 +1,4 @@
-package xyz.vibzz.jingle.thincapture;
+package xyz.vibzz.jingle.thincapture.frame;
 
 import com.sun.jna.Native;
 import com.sun.jna.Pointer;
@@ -10,6 +10,7 @@ import xyz.duncanruns.jingle.Jingle;
 import xyz.duncanruns.jingle.util.WindowStateUtil;
 import xyz.duncanruns.jingle.win32.GDI32Extra;
 import xyz.duncanruns.jingle.win32.User32;
+import xyz.vibzz.jingle.thincapture.ThinCapture;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;

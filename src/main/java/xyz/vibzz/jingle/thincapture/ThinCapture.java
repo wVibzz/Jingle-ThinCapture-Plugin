@@ -9,6 +9,11 @@ import xyz.duncanruns.jingle.gui.JingleGUI;
 import xyz.duncanruns.jingle.plugin.PluginEvents;
 import xyz.duncanruns.jingle.plugin.PluginManager;
 import xyz.duncanruns.jingle.win32.User32;
+import xyz.vibzz.jingle.thincapture.config.BackgroundConfig;
+import xyz.vibzz.jingle.thincapture.config.CaptureConfig;
+import xyz.vibzz.jingle.thincapture.frame.BackgroundFrame;
+import xyz.vibzz.jingle.thincapture.frame.CaptureFrame;
+import xyz.vibzz.jingle.thincapture.ui.ThinCapturePluginPanel;
 
 import java.awt.*;
 import java.io.IOException;
@@ -23,14 +28,15 @@ public class ThinCapture {
     public static final ScheduledExecutorService EXECUTOR = Executors.newSingleThreadScheduledExecutor();
     private static ThinCaptureOptions options = null;
     private static final List<CaptureFrame> frames = new ArrayList<>();
-    private static BackgroundFrame backgroundFrame = null;
+    private static final List<BackgroundFrame> bgFrames = new ArrayList<>();
     private static boolean capturesShowing = false;
+
     public static ThinCaptureOptions getOptions() {
         return options;
     }
 
-    public static BackgroundFrame getBackgroundFrame() {
-        return backgroundFrame;
+    public static List<BackgroundFrame> getBgFrames() {
+        return bgFrames;
     }
 
     public static void main(String[] args) throws IOException {
@@ -52,28 +58,26 @@ public class ThinCapture {
             frames.add(new CaptureFrame(config.name));
         }
 
-        backgroundFrame = new BackgroundFrame();
+        for (BackgroundConfig bg : options.backgrounds) {
+            BackgroundFrame frame = new BackgroundFrame();
+            if (bg.imagePath != null && !bg.imagePath.trim().isEmpty()) {
+                frame.loadImage(bg.imagePath);
+            }
+            bgFrames.add(frame);
+        }
 
         ThinCapturePluginPanel pluginPanel = new ThinCapturePluginPanel();
         JingleGUI.addPluginTab("ThinCapture", pluginPanel.mainPanel, pluginPanel::onSwitchTo);
 
-        // Use Jingle's own tick (~1ms) instead of separate polling
         PluginEvents.START_TICK.register(ThinCapture::detectThinBT);
         PluginEvents.STOP.register(ThinCapture::stop);
 
-        // Pre-load background image so show is instant
-        if (options.bgEnabled && options.bgImagePath != null && !options.bgImagePath.trim().isEmpty()) {
-            backgroundFrame.loadImage(options.bgImagePath);
-        }
-
-        Jingle.log(Level.INFO, "ThinCapture Plugin Initialized (" + options.captures.size() + " captures)");
+        Jingle.log(Level.INFO, "ThinCapture Plugin Initialized (" + options.captures.size() + " captures, " + options.backgrounds.size() + " backgrounds)");
     }
 
     public static void addCapture(String name) {
-        CaptureConfig config = new CaptureConfig(name);
-        options.captures.add(config);
-        CaptureFrame frame = new CaptureFrame(name);
-        frames.add(frame);
+        options.captures.add(new CaptureConfig(name));
+        frames.add(new CaptureFrame(name));
     }
 
     public static void removeCapture(int index) {
@@ -88,6 +92,31 @@ public class ThinCapture {
         if (index < 0 || index >= options.captures.size()) return;
         options.captures.get(index).name = newName;
         frames.get(index).setTitle("ThinCapture " + newName);
+    }
+
+    public static void addBackground(String name) {
+        BackgroundConfig config = new BackgroundConfig(name);
+        config.enabled = true;
+        options.backgrounds.add(config);
+        bgFrames.add(new BackgroundFrame());
+    }
+
+    public static void removeBackground(int index) {
+        if (index < 0 || index >= options.backgrounds.size()) return;
+        options.backgrounds.remove(index);
+        BackgroundFrame frame = bgFrames.remove(index);
+        if (frame.isShowing()) frame.hideBackground();
+        frame.dispose();
+    }
+
+    public static void renameBackground(int index, String newName) {
+        if (index < 0 || index >= options.backgrounds.size()) return;
+        options.backgrounds.get(index).name = newName;
+    }
+
+    public static BackgroundFrame getBgFrame(int index) {
+        if (index < 0 || index >= bgFrames.size()) return null;
+        return bgFrames.get(index);
     }
 
     private static void detectThinBT() {
@@ -109,8 +138,10 @@ public class ThinCapture {
                 showCaptureWindows();
             } else if (!isThinBT && capturesShowing) {
                 hideCaptureWindows();
-            } else if (isThinBT && backgroundFrame.isShowing()) {
-                backgroundFrame.sendBehindMC();
+            } else if (isThinBT) {
+                for (BackgroundFrame bf : bgFrames) {
+                    if (bf.isShowing()) bf.sendBehindMC();
+                }
             }
         } catch (Exception ignored) {
         }
@@ -119,11 +150,13 @@ public class ThinCapture {
     private static void showCaptureWindows() {
         capturesShowing = true;
 
-        boolean showBg = options.bgEnabled && options.bgImagePath != null && !options.bgImagePath.trim().isEmpty();
-
-        // Phase 1: Position everything (no showing yet)
-        if (showBg) {
-            backgroundFrame.positionBackground(options.bgX, options.bgY, options.bgWidth, options.bgHeight);
+        // Phase 1: Position everything
+        for (int i = 0; i < options.backgrounds.size() && i < bgFrames.size(); i++) {
+            BackgroundConfig bg = options.backgrounds.get(i);
+            BackgroundFrame bf = bgFrames.get(i);
+            if (bg.enabled && bg.imagePath != null && !bg.imagePath.trim().isEmpty()) {
+                bf.positionBackground(bg.x, bg.y, bg.width, bg.height);
+            }
         }
 
         List<CaptureFrame> toShow = new ArrayList<>();
@@ -140,9 +173,13 @@ public class ThinCapture {
             }
         }
 
-        // Phase 2: Show everything at once
-        if (showBg) {
-            backgroundFrame.showBackground();
+        // Phase 2: Show everything
+        for (int i = 0; i < options.backgrounds.size() && i < bgFrames.size(); i++) {
+            BackgroundConfig bg = options.backgrounds.get(i);
+            BackgroundFrame bf = bgFrames.get(i);
+            if (bg.enabled && bg.imagePath != null && !bg.imagePath.trim().isEmpty()) {
+                bf.showBackground();
+            }
         }
         for (CaptureFrame f : toShow) {
             f.showCapture();
@@ -151,8 +188,8 @@ public class ThinCapture {
 
     private static void hideCaptureWindows() {
         capturesShowing = false;
-        if (backgroundFrame.isShowing()) {
-            backgroundFrame.hideBackground();
+        for (BackgroundFrame bf : bgFrames) {
+            if (bf.isShowing()) bf.hideBackground();
         }
         for (CaptureFrame f : frames) {
             if (f.isShowing()) f.hideCapture();
@@ -179,7 +216,9 @@ public class ThinCapture {
         for (CaptureFrame f : frames) {
             f.dispose();
         }
-        if (backgroundFrame != null) backgroundFrame.dispose();
+        for (BackgroundFrame bf : bgFrames) {
+            bf.dispose();
+        }
         if (options != null) if (!options.trySave()) Jingle.log(Level.ERROR, "Failed to save ThinCapture options!");
     }
 }

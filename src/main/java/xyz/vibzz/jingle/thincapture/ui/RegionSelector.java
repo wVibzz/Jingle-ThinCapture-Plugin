@@ -1,4 +1,4 @@
-package xyz.vibzz.jingle.thincapture;
+package xyz.vibzz.jingle.thincapture.ui;
 
 import javax.swing.*;
 import java.awt.*;

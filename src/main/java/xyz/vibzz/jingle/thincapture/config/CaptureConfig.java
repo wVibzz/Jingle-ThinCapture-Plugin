@@ -1,4 +1,4 @@
-package xyz.vibzz.jingle.thincapture;
+package xyz.vibzz.jingle.thincapture.config;
 
 public class CaptureConfig {
     public String name = "New Capture";

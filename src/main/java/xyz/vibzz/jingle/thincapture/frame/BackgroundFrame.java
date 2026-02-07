@@ -1,4 +1,4 @@
-package xyz.vibzz.jingle.thincapture;
+package xyz.vibzz.jingle.thincapture.frame;
 
 import com.sun.jna.Native;
 import com.sun.jna.Pointer;
