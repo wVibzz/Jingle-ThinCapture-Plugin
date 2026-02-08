@@ -5,13 +5,13 @@ import com.sun.jna.Pointer;
 import com.sun.jna.platform.win32.WinDef;
 import org.apache.logging.log4j.Level;
 import xyz.duncanruns.jingle.Jingle;
-import xyz.vibzz.jingle.thincapture.util.ScaleUtil;
 import xyz.duncanruns.jingle.util.WindowStateUtil;
 import xyz.duncanruns.jingle.win32.User32;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
 import java.awt.*;
+import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.io.File;
 
@@ -37,6 +37,10 @@ public class BackgroundFrame extends JFrame {
         frameHwnd = new WinDef.HWND(Native.getWindowPointer(this));
         WindowStateUtil.setHwndBorderless(frameHwnd);
         com.sun.jna.platform.win32.User32.INSTANCE.ShowWindow(frameHwnd, SW_HIDE);
+    }
+
+    public WinDef.HWND getHwnd() {
+        return frameHwnd;
     }
 
     public void loadImage(String path) {
@@ -66,18 +70,17 @@ public class BackgroundFrame extends JFrame {
         Jingle.log(Level.DEBUG, "Showing ThinCapture Background...");
         com.sun.jna.platform.win32.User32.INSTANCE.ShowWindow(frameHwnd, SW_SHOWNOACTIVATE);
         currentlyShowing = true;
-        sendBehindMC();
     }
 
-    public void sendBehindMC() {
+    /**
+     * Places this background window directly behind the given window in the Z-order.
+     */
+    public void sendBehind(WinDef.HWND insertAfter) {
         if (!currentlyShowing) return;
-        if (!Jingle.getMainInstance().isPresent()) return;
-
-        WinDef.HWND mcHwnd = Jingle.getMainInstance().get().hwnd;
 
         User32.INSTANCE.SetWindowPos(
                 frameHwnd,
-                mcHwnd,
+                insertAfter,
                 0, 0, 0, 0,
                 User32.SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE
         );
@@ -110,19 +113,20 @@ public class BackgroundFrame extends JFrame {
         super.dispose();
     }
 
-    /**
-     * Sets window position accounting for Windows display scaling.
-     * Coordinates passed in are logical (Java) coordinates.
-     */
     private static void setScaledWindowPos(WinDef.HWND hwnd, int x, int y, int w, int h) {
-        float scale = ScaleUtil.getScaleFactor();
+        AffineTransform tx = GraphicsEnvironment.getLocalGraphicsEnvironment()
+                .getDefaultScreenDevice().getDefaultConfiguration()
+                .getDefaultTransform();
+        double scaleX = tx.getScaleX();
+        double scaleY = tx.getScaleY();
+
         User32.INSTANCE.SetWindowPos(
                 hwnd,
                 new WinDef.HWND(new Pointer(0)),
-                (int) (x / scale),
-                (int) (y / scale),
-                (int) Math.floor(w / scale),
-                (int) Math.floor(h / scale),
+                (int) (x * scaleX),
+                (int) (y * scaleY),
+                (int) (w * scaleX),
+                (int) (h * scaleY),
                 User32.SWP_NOACTIVATE | User32.SWP_NOSENDCHANGING
         );
     }

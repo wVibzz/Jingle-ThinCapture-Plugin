@@ -157,6 +157,17 @@ public class PlanarAbusePluginPanel {
             RegionSelector.editOnScreen(current, onRegionSelected);
         });
 
+        JButton applyBtn = createSmallButton("Apply", a -> {
+            c.screenX = intFrom(ox, 0);
+            c.screenY = intFrom(oy, 0);
+            c.screenW = Math.max(1, intFrom(ow, 200));
+            c.screenH = Math.max(1, intFrom(oh, 200));
+            ox.setText(String.valueOf(c.screenX));
+            oy.setText(String.valueOf(c.screenY));
+            ow.setText(String.valueOf(c.screenW));
+            oh.setText(String.valueOf(c.screenH));
+        });
+
         JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -171,11 +182,13 @@ public class PlanarAbusePluginPanel {
         row.add(oh);
         row.add(selectBtn);
         row.add(editBtn);
+        row.add(applyBtn);
 
         return row;
     }
 
     private JPanel buildMCRegionRow(CaptureConfig c) {
+        ThinCaptureOptions o = ThinCapture.getOptions();
         JTextField rx = field(c.captureX), ry = field(c.captureY), rw = field(c.captureW), rh = field(c.captureH);
 
         Consumer<Rectangle> onRegionSelected = r -> {
@@ -196,6 +209,17 @@ public class PlanarAbusePluginPanel {
             RegionSelector.editOnMCWindow(current, onRegionSelected);
         });
 
+        JButton applyBtn = createSmallButton("Apply", a -> {
+            c.captureX = clamp(intFrom(rx, 0), 0, o.planarAbuseWidth - 1);
+            c.captureY = clamp(intFrom(ry, 0), 0, o.planarAbuseHeight - 1);
+            c.captureW = clamp(Math.max(1, intFrom(rw, 200)), 1, o.planarAbuseWidth - c.captureX);
+            c.captureH = clamp(Math.max(1, intFrom(rh, 200)), 1, o.planarAbuseHeight - c.captureY);
+            rx.setText(String.valueOf(c.captureX));
+            ry.setText(String.valueOf(c.captureY));
+            rw.setText(String.valueOf(c.captureW));
+            rh.setText(String.valueOf(c.captureH));
+        });
+
         JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -210,6 +234,7 @@ public class PlanarAbusePluginPanel {
         row.add(rh);
         row.add(selectBtn);
         row.add(editBtn);
+        row.add(applyBtn);
 
         return row;
     }

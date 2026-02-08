@@ -42,6 +42,13 @@ public class ThinCapture {
 
     // EyeSee frames
     private static final List<BackgroundFrame> eyeSeeBgFrames = new ArrayList<>();
+    private static boolean eyeSeeShowing = false;
+
+    // Background management
+    private static boolean backgroundsShowing = false;
+
+    private enum ActiveBgType { NONE, THIN_BT, PLANAR, EYESEE }
+    private static ActiveBgType activeBgType = ActiveBgType.NONE;
 
     public static ThinCaptureOptions getOptions() {
         return options;
@@ -107,8 +114,8 @@ public class ThinCapture {
 
         // Register events
         PluginEvents.START_TICK.register(ThinCapture::detectResize);
-        PluginEvents.SHOW_PROJECTOR.register(ThinCapture::showEyeSeeCaptures);
-        PluginEvents.DUMP_PROJECTOR.register(ThinCapture::hideEyeSeeCaptures);
+        PluginEvents.SHOW_PROJECTOR.register(ThinCapture::onShowProjector);
+        PluginEvents.DUMP_PROJECTOR.register(ThinCapture::onDumpProjector);
         PluginEvents.STOP.register(ThinCapture::stop);
 
         Jingle.log(Level.INFO, "ThinCapture Plugin Initialized (" +
@@ -236,6 +243,122 @@ public class ThinCapture {
         return eyeSeeBgFrames.get(index);
     }
 
+    // ===== Background Management =====
+
+    private static void showAllBackgrounds() {
+        if (backgroundsShowing) return;
+        backgroundsShowing = true;
+        Jingle.log(Level.DEBUG, "Showing all ThinCapture backgrounds...");
+
+        positionAndShowBgList(options.backgrounds, bgFrames);
+        positionAndShowBgList(options.planarAbuseBackgrounds, planarBgFrames);
+        if (options.eyeSeeEnabled) {
+            positionAndShowBgList(options.eyeSeeBackgrounds, eyeSeeBgFrames);
+        }
+    }
+
+    private static void positionAndShowBgList(List<BackgroundConfig> configs, List<BackgroundFrame> bgList) {
+        for (int i = 0; i < configs.size() && i < bgList.size(); i++) {
+            BackgroundConfig bg = configs.get(i);
+            BackgroundFrame bf = bgList.get(i);
+            if (bg.enabled && bg.imagePath != null && !bg.imagePath.trim().isEmpty()) {
+                bf.positionBackground(bg.x, bg.y, bg.width, bg.height);
+                if (!bf.isShowing()) {
+                    bf.showBackground();
+                }
+            }
+        }
+    }
+
+    private static void hideAllBackgrounds() {
+        if (!backgroundsShowing) return;
+        backgroundsShowing = false;
+        activeBgType = ActiveBgType.NONE;
+        Jingle.log(Level.DEBUG, "Hiding all ThinCapture backgrounds...");
+
+        hideBgList(bgFrames);
+        hideBgList(planarBgFrames);
+        hideBgList(eyeSeeBgFrames);
+    }
+
+    private static void hideBgList(List<BackgroundFrame> bgList) {
+        for (BackgroundFrame bf : bgList) {
+            if (bf.isShowing()) bf.hideBackground();
+        }
+    }
+
+    /**
+     * Reorders all backgrounds behind MC with the active type directly behind MC,
+     * then the other types stacked further back.
+     *
+     * Z-order: MC -> active type bgs -> other type bgs -> other type bgs -> ...
+     */
+    private static void reorderBackgrounds() {
+        if (!Jingle.getMainInstance().isPresent()) return;
+        WinDef.HWND current = Jingle.getMainInstance().get().hwnd;
+
+        // Active type goes directly behind MC
+        // EyeSee always above the other two, but below the active type if one is active
+        if (activeBgType == ActiveBgType.THIN_BT) {
+            current = chainBgListBehind(current, bgFrames);
+            current = chainBgListBehind(current, eyeSeeBgFrames);
+            current = chainBgListBehind(current, planarBgFrames);
+        } else if (activeBgType == ActiveBgType.PLANAR) {
+            current = chainBgListBehind(current, planarBgFrames);
+            current = chainBgListBehind(current, eyeSeeBgFrames);
+            current = chainBgListBehind(current, bgFrames);
+        } else {
+            // No capture active (or EYESEE/NONE) — EyeSee on top
+            current = chainBgListBehind(current, eyeSeeBgFrames);
+            current = chainBgListBehind(current, bgFrames);
+            current = chainBgListBehind(current, planarBgFrames);
+        }
+    }
+
+    /**
+     * Chains backgrounds behind the given window. Returns the last placed HWND.
+     */
+    private static WinDef.HWND chainBgListBehind(WinDef.HWND insertAfter, List<BackgroundFrame> bgList) {
+        WinDef.HWND current = insertAfter;
+        for (BackgroundFrame bf : bgList) {
+            if (bf.isShowing()) {
+                bf.sendBehind(current);
+                current = bf.getHwnd();
+            }
+        }
+        return current;
+    }
+
+    private static void setActiveBgType(ActiveBgType type) {
+        if (activeBgType == type) return;
+        activeBgType = type;
+        reorderBackgrounds();
+    }
+
+    // ===== EyeSee Projector Events =====
+
+    private static void onShowProjector() {
+        if (!options.eyeSeeEnabled) return;
+        eyeSeeShowing = true;
+        if (options.preloadBackgrounds) {
+            setActiveBgType(ActiveBgType.EYESEE);
+        } else {
+            positionAndShowBgList(options.eyeSeeBackgrounds, eyeSeeBgFrames);
+        }
+    }
+
+    private static void onDumpProjector() {
+        if (!options.eyeSeeEnabled) return;
+        eyeSeeShowing = false;
+        if (options.preloadBackgrounds) {
+            if (thinBTShowing) setActiveBgType(ActiveBgType.THIN_BT);
+            else if (planarShowing) setActiveBgType(ActiveBgType.PLANAR);
+            else setActiveBgType(ActiveBgType.NONE);
+        } else {
+            hideBgList(eyeSeeBgFrames);
+        }
+    }
+
     // ===== Resize Detection =====
 
     private static void detectResize() {
@@ -243,10 +366,32 @@ public class ThinCapture {
             if (!Jingle.getMainInstance().isPresent()) {
                 if (thinBTShowing) hideThinBTCaptures();
                 if (planarShowing) hidePlanarCaptures();
+                if (backgroundsShowing) hideAllBackgrounds();
                 return;
             }
 
             WinDef.HWND hwnd = Jingle.getMainInstance().get().hwnd;
+
+            // Check if MC is focused
+            WinDef.HWND foreground = com.sun.jna.platform.win32.User32.INSTANCE.GetForegroundWindow();
+            boolean mcFocused = foreground != null && foreground.equals(hwnd);
+
+            // Background management
+            if (options.preloadBackgrounds) {
+                // New method: always show behind MC when focused, reorder by active type
+                if (mcFocused) {
+                    if (!backgroundsShowing) {
+                        showAllBackgrounds();
+                    }
+                    reorderBackgrounds();
+                } else {
+                    if (backgroundsShowing) {
+                        hideAllBackgrounds();
+                    }
+                }
+            }
+
+            // Capture resize detection
             WinDef.RECT rect = new WinDef.RECT();
             User32.INSTANCE.GetClientRect(hwnd, rect);
             int w = rect.right - rect.left;
@@ -258,23 +403,19 @@ public class ThinCapture {
             // Thin BT
             if (isThinBT && !thinBTShowing) {
                 showThinBTCaptures();
+                if (!eyeSeeShowing) setActiveBgType(ActiveBgType.THIN_BT);
             } else if (!isThinBT && thinBTShowing) {
                 hideThinBTCaptures();
-            } else if (isThinBT) {
-                for (BackgroundFrame bf : bgFrames) {
-                    if (bf.isShowing()) bf.sendBehindMC();
-                }
+                if (activeBgType == ActiveBgType.THIN_BT) setActiveBgType(ActiveBgType.NONE);
             }
 
             // Planar Abuse
             if (isPlanar && !planarShowing) {
                 showPlanarCaptures();
+                if (!eyeSeeShowing) setActiveBgType(ActiveBgType.PLANAR);
             } else if (!isPlanar && planarShowing) {
                 hidePlanarCaptures();
-            } else if (isPlanar) {
-                for (BackgroundFrame bf : planarBgFrames) {
-                    if (bf.isShowing()) bf.sendBehindMC();
-                }
+                if (activeBgType == ActiveBgType.PLANAR) setActiveBgType(ActiveBgType.NONE);
             }
         } catch (Exception ignored) {}
     }
@@ -284,12 +425,9 @@ public class ThinCapture {
     private static void showThinBTCaptures() {
         thinBTShowing = true;
 
-        for (int i = 0; i < options.backgrounds.size() && i < bgFrames.size(); i++) {
-            BackgroundConfig bg = options.backgrounds.get(i);
-            BackgroundFrame bf = bgFrames.get(i);
-            if (bg.enabled && bg.imagePath != null && !bg.imagePath.trim().isEmpty()) {
-                bf.positionBackground(bg.x, bg.y, bg.width, bg.height);
-            }
+        // Old method: show backgrounds on mode activation
+        if (!options.preloadBackgrounds) {
+            positionAndShowBgList(options.backgrounds, bgFrames);
         }
 
         List<CaptureFrame> toShow = new ArrayList<>();
@@ -306,13 +444,6 @@ public class ThinCapture {
             }
         }
 
-        for (int i = 0; i < options.backgrounds.size() && i < bgFrames.size(); i++) {
-            BackgroundConfig bg = options.backgrounds.get(i);
-            BackgroundFrame bf = bgFrames.get(i);
-            if (bg.enabled && bg.imagePath != null && !bg.imagePath.trim().isEmpty()) {
-                bf.showBackground();
-            }
-        }
         for (CaptureFrame f : toShow) {
             f.showCapture();
         }
@@ -320,8 +451,8 @@ public class ThinCapture {
 
     private static void hideThinBTCaptures() {
         thinBTShowing = false;
-        for (BackgroundFrame bf : bgFrames) {
-            if (bf.isShowing()) bf.hideBackground();
+        if (!options.preloadBackgrounds) {
+            hideBgList(bgFrames);
         }
         for (CaptureFrame f : frames) {
             if (f.isShowing()) f.hideCapture();
@@ -333,12 +464,9 @@ public class ThinCapture {
     private static void showPlanarCaptures() {
         planarShowing = true;
 
-        for (int i = 0; i < options.planarAbuseBackgrounds.size() && i < planarBgFrames.size(); i++) {
-            BackgroundConfig bg = options.planarAbuseBackgrounds.get(i);
-            BackgroundFrame bf = planarBgFrames.get(i);
-            if (bg.enabled && bg.imagePath != null && !bg.imagePath.trim().isEmpty()) {
-                bf.positionBackground(bg.x, bg.y, bg.width, bg.height);
-            }
+        // Old method: show backgrounds on mode activation
+        if (!options.preloadBackgrounds) {
+            positionAndShowBgList(options.planarAbuseBackgrounds, planarBgFrames);
         }
 
         List<CaptureFrame> toShow = new ArrayList<>();
@@ -355,13 +483,6 @@ public class ThinCapture {
             }
         }
 
-        for (int i = 0; i < options.planarAbuseBackgrounds.size() && i < planarBgFrames.size(); i++) {
-            BackgroundConfig bg = options.planarAbuseBackgrounds.get(i);
-            BackgroundFrame bf = planarBgFrames.get(i);
-            if (bg.enabled && bg.imagePath != null && !bg.imagePath.trim().isEmpty()) {
-                bf.showBackground();
-            }
-        }
         for (CaptureFrame f : toShow) {
             f.showCapture();
         }
@@ -369,35 +490,11 @@ public class ThinCapture {
 
     private static void hidePlanarCaptures() {
         planarShowing = false;
-        for (BackgroundFrame bf : planarBgFrames) {
-            if (bf.isShowing()) bf.hideBackground();
+        if (!options.preloadBackgrounds) {
+            hideBgList(planarBgFrames);
         }
         for (CaptureFrame f : planarFrames) {
             if (f.isShowing()) f.hideCapture();
-        }
-    }
-
-    // ===== EyeSee Show/Hide =====
-
-    private static void showEyeSeeCaptures() {
-        if (!options.eyeSeeEnabled) return;
-        if (!Jingle.getMainInstance().isPresent()) return;
-
-        for (int i = 0; i < options.eyeSeeBackgrounds.size() && i < eyeSeeBgFrames.size(); i++) {
-            BackgroundConfig bg = options.eyeSeeBackgrounds.get(i);
-            BackgroundFrame bf = eyeSeeBgFrames.get(i);
-            if (bg.enabled && bg.imagePath != null && !bg.imagePath.trim().isEmpty()) {
-                bf.positionBackground(bg.x, bg.y, bg.width, bg.height);
-                bf.showBackground();
-            }
-        }
-    }
-
-    private static void hideEyeSeeCaptures() {
-        if (!options.eyeSeeEnabled) return;
-
-        for (BackgroundFrame bf : eyeSeeBgFrames) {
-            if (bf.isShowing()) bf.hideBackground();
         }
     }
 

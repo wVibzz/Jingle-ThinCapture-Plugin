@@ -1,10 +1,9 @@
 package xyz.vibzz.jingle.thincapture.ui;
 
-import xyz.vibzz.jingle.thincapture.util.ScaleUtil;
-
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
+import java.awt.geom.AffineTransform;
 import java.util.function.Consumer;
 
 /**
@@ -339,6 +338,23 @@ public class RegionSelector extends JFrame {
 
     // ===== Static helpers =====
 
+    /**
+     * Gets the display scale factor from the default screen's AffineTransform.
+     * On Java 9+ at 125% DPI this returns 1.25.
+     * On Java 8 this returns 1.0 (Java 8 is not DPI-aware).
+     */
+    private static double getDisplayScaleX() {
+        return GraphicsEnvironment.getLocalGraphicsEnvironment()
+                .getDefaultScreenDevice().getDefaultConfiguration()
+                .getDefaultTransform().getScaleX();
+    }
+
+    private static double getDisplayScaleY() {
+        return GraphicsEnvironment.getLocalGraphicsEnvironment()
+                .getDefaultScreenDevice().getDefaultConfiguration()
+                .getDefaultTransform().getScaleY();
+    }
+
     public static void selectOnScreen(Consumer<Rectangle> onSelected) {
         Rectangle screenBounds = GraphicsEnvironment.getLocalGraphicsEnvironment()
                 .getDefaultScreenDevice().getDefaultConfiguration().getBounds();
@@ -351,24 +367,43 @@ public class RegionSelector extends JFrame {
         new RegionSelector("Edit Monitor Position", screenBounds, current, onSelected);
     }
 
+    /**
+     * Opens a region selector overlay positioned over the MC window's client area.
+     * The returned rectangle is in MC client pixel coordinates.
+     *
+     * GetWindowRect returns physical screen coords.
+     * Java's setBounds expects logical coords (physical / displayScale on Java 9+).
+     * We use ClientToScreen to find the client area's screen position,
+     * then convert to Java logical coords for the overlay.
+     */
     public static void selectOnMCWindow(Consumer<Rectangle> onSelected) {
         if (!xyz.duncanruns.jingle.Jingle.getMainInstance().isPresent()) {
             JOptionPane.showMessageDialog(null, "No Minecraft instance detected.", "ThinCapture", JOptionPane.WARNING_MESSAGE);
             return;
         }
         com.sun.jna.platform.win32.WinDef.HWND hwnd = xyz.duncanruns.jingle.Jingle.getMainInstance().get().hwnd;
-        com.sun.jna.platform.win32.WinDef.RECT rect = new com.sun.jna.platform.win32.WinDef.RECT();
-        xyz.duncanruns.jingle.win32.User32.INSTANCE.GetWindowRect(hwnd, rect);
 
-        // GetWindowRect returns physical coords, multiply by scaleFactor for Java coords
-        float scale = ScaleUtil.getScaleFactor();
-        Rectangle mcBounds = new Rectangle(
-                (int) (rect.left * scale),
-                (int) (rect.top * scale),
-                (int) ((rect.right - rect.left) * scale),
-                (int) ((rect.bottom - rect.top) * scale)
-        );
-        new RegionSelector("Select MC Region", mcBounds, onSelected);
+        Rectangle mcBounds = getMCClientBoundsInLogicalCoords(hwnd);
+        if (mcBounds == null) return;
+
+        // Get MC client size for converting overlay coords back to client pixels
+        com.sun.jna.platform.win32.WinDef.RECT clientRect = new com.sun.jna.platform.win32.WinDef.RECT();
+        xyz.duncanruns.jingle.win32.User32.INSTANCE.GetClientRect(hwnd, clientRect);
+        int clientW = clientRect.right - clientRect.left;
+        int clientH = clientRect.bottom - clientRect.top;
+
+        // Ratio: overlay logical pixels -> MC client pixels
+        double toClientX = mcBounds.width > 0 ? (double) clientW / mcBounds.width : 1.0;
+        double toClientY = mcBounds.height > 0 ? (double) clientH / mcBounds.height : 1.0;
+
+        new RegionSelector("Select MC Region", mcBounds, r -> {
+            onSelected.accept(new Rectangle(
+                    (int) (r.x * toClientX),
+                    (int) (r.y * toClientY),
+                    (int) (r.width * toClientX),
+                    (int) (r.height * toClientY)
+            ));
+        });
     }
 
     public static void editOnMCWindow(Rectangle current, Consumer<Rectangle> onSelected) {
@@ -377,17 +412,95 @@ public class RegionSelector extends JFrame {
             return;
         }
         com.sun.jna.platform.win32.WinDef.HWND hwnd = xyz.duncanruns.jingle.Jingle.getMainInstance().get().hwnd;
-        com.sun.jna.platform.win32.WinDef.RECT rect = new com.sun.jna.platform.win32.WinDef.RECT();
-        xyz.duncanruns.jingle.win32.User32.INSTANCE.GetWindowRect(hwnd, rect);
 
-        // GetWindowRect returns physical coords, multiply by scaleFactor for Java coords
-        float scale = ScaleUtil.getScaleFactor();
-        Rectangle mcBounds = new Rectangle(
-                (int) (rect.left * scale),
-                (int) (rect.top * scale),
-                (int) ((rect.right - rect.left) * scale),
-                (int) ((rect.bottom - rect.top) * scale)
+        Rectangle mcBounds = getMCClientBoundsInLogicalCoords(hwnd);
+        if (mcBounds == null) return;
+
+        com.sun.jna.platform.win32.WinDef.RECT clientRect = new com.sun.jna.platform.win32.WinDef.RECT();
+        xyz.duncanruns.jingle.win32.User32.INSTANCE.GetClientRect(hwnd, clientRect);
+        int clientW = clientRect.right - clientRect.left;
+        int clientH = clientRect.bottom - clientRect.top;
+
+        double toClientX = mcBounds.width > 0 ? (double) clientW / mcBounds.width : 1.0;
+        double toClientY = mcBounds.height > 0 ? (double) clientH / mcBounds.height : 1.0;
+        double toOverlayX = toClientX > 0 ? 1.0 / toClientX : 1.0;
+        double toOverlayY = toClientY > 0 ? 1.0 / toClientY : 1.0;
+
+        // Convert current MC client rect to overlay coords for editing
+        Rectangle overlayRect = new Rectangle(
+                (int) (current.x * toOverlayX),
+                (int) (current.y * toOverlayY),
+                (int) (current.width * toOverlayX),
+                (int) (current.height * toOverlayY)
         );
-        new RegionSelector("Edit MC Region", mcBounds, current, onSelected);
+
+        new RegionSelector("Edit MC Region", mcBounds, overlayRect, r -> {
+            onSelected.accept(new Rectangle(
+                    (int) (r.x * toClientX),
+                    (int) (r.y * toClientY),
+                    (int) (r.width * toClientX),
+                    (int) (r.height * toClientY)
+            ));
+        });
+    }
+
+    private static Rectangle getMCClientBoundsInLogicalCoords(com.sun.jna.platform.win32.WinDef.HWND hwnd) {
+        // Full window rect in physical screen coords
+        com.sun.jna.platform.win32.WinDef.RECT winRect = new com.sun.jna.platform.win32.WinDef.RECT();
+        xyz.duncanruns.jingle.win32.User32.INSTANCE.GetWindowRect(hwnd, winRect);
+        int winW = winRect.right - winRect.left;
+        int winH = winRect.bottom - winRect.top;
+
+        // Client area size in client pixels
+        com.sun.jna.platform.win32.WinDef.RECT clientRect = new com.sun.jna.platform.win32.WinDef.RECT();
+        xyz.duncanruns.jingle.win32.User32.INSTANCE.GetClientRect(hwnd, clientRect);
+        int clientW = clientRect.right - clientRect.left;
+        int clientH = clientRect.bottom - clientRect.top;
+
+        // Use DWMWA_EXTENDED_FRAME_BOUNDS or compute frame sizes
+        // For standard windows: borders are symmetric left/right/bottom, title bar is on top
+        // Physical frame sizes = (winSize - clientSize_in_physical)
+        // clientSize_in_physical might differ from clientW at non-100% DPI if DWM is scaling
+        //
+        // Simplest robust approach: use the window style to compute frame sizes
+        int style = com.sun.jna.platform.win32.User32.INSTANCE.GetWindowLong(hwnd, -16); // GWL_STYLE
+        int exStyle = com.sun.jna.platform.win32.User32.INSTANCE.GetWindowLong(hwnd, -20); // GWL_EXSTYLE
+
+        // Use AdjustWindowRectEx to figure out how much the frame adds
+        com.sun.jna.platform.win32.WinDef.RECT frameRect = new com.sun.jna.platform.win32.WinDef.RECT();
+        frameRect.left = 0;
+        frameRect.top = 0;
+        frameRect.right = 0;
+        frameRect.bottom = 0;
+        com.sun.jna.platform.win32.User32.INSTANCE.AdjustWindowRectEx(
+                frameRect,
+                new com.sun.jna.platform.win32.WinDef.DWORD(style),
+                new com.sun.jna.platform.win32.WinDef.BOOL(false),
+                new com.sun.jna.platform.win32.WinDef.DWORD(exStyle)
+        );
+        // frameRect now contains negative left/top (border + title) and positive right/bottom
+        // e.g. left=-8, top=-31, right=8, bottom=8
+        int borderLeft = -frameRect.left;
+        int borderTop = -frameRect.top;
+
+        // The client area starts at (winRect.left + borderLeft, winRect.top + borderTop)
+        // in physical screen coords
+        int clientScreenX = winRect.left + borderLeft;
+        int clientScreenY = winRect.top + borderTop;
+
+        // Physical size of the client area on screen (may differ from clientW/H if DWM is scaling)
+        int physClientW = winW - borderLeft - frameRect.right;
+        int physClientH = winH - borderTop - frameRect.bottom;
+
+        // Convert to Java logical coords
+        double scaleX = getDisplayScaleX();
+        double scaleY = getDisplayScaleY();
+
+        return new Rectangle(
+                (int) (clientScreenX / scaleX),
+                (int) (clientScreenY / scaleY),
+                (int) (physClientW / scaleX),
+                (int) (physClientH / scaleY)
+        );
     }
 }

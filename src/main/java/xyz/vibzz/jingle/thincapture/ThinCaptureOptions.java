@@ -31,9 +31,15 @@ public class ThinCaptureOptions {
     public List<CaptureConfig> planarAbuseCaptures = new ArrayList<>();
     public List<BackgroundConfig> planarAbuseBackgrounds = new ArrayList<>();
 
+    // Compatibility
+    public boolean amdCompatMode = false;
+
     // EyeSee settings
     public boolean eyeSeeEnabled = false;
     public List<BackgroundConfig> eyeSeeBackgrounds = new ArrayList<>();
+
+    // Background preloading
+    public boolean preloadBackgrounds = false;
 
     public static Optional<ThinCaptureOptions> load() {
         if (!Files.exists(OPTIONS_PATH)) return Optional.of(new ThinCaptureOptions());

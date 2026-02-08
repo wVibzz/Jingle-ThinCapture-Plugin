@@ -22,6 +22,22 @@ public class BackgroundsPluginPanel {
         mainPanel.setLayout(new BoxLayout(mainPanel, BoxLayout.Y_AXIS));
         mainPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
 
+        // Preload toggle
+        ThinCaptureOptions o = ThinCapture.getOptions();
+
+        JPanel preloadRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        preloadRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
+        preloadRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JCheckBox preloadBox = new JCheckBox("Preload Backgrounds");
+        preloadBox.setSelected(o.preloadBackgrounds);
+        preloadBox.addActionListener(a -> o.preloadBackgrounds = preloadBox.isSelected());
+        preloadRow.add(preloadBox);
+        JLabel preloadDesc = new JLabel("Keep backgrounds always behind MC when focused (reduces delay on toggle)");
+        preloadDesc.setFont(preloadDesc.getFont().deriveFont(Font.ITALIC, 11f));
+        preloadRow.add(preloadDesc);
+        mainPanel.add(preloadRow);
+        mainPanel.add(Box.createRigidArea(new Dimension(0, 8)));
+
         // Thin BT Backgrounds Section
         JPanel thinBTSection = new JPanel();
         thinBTSection.setLayout(new BoxLayout(thinBTSection, BoxLayout.Y_AXIS));
@@ -89,8 +105,6 @@ public class BackgroundsPluginPanel {
         eyeSeeSection.setLayout(new BoxLayout(eyeSeeSection, BoxLayout.Y_AXIS));
         eyeSeeSection.setBorder(BorderFactory.createTitledBorder("EyeSee Backgrounds"));
         eyeSeeSection.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        ThinCaptureOptions o = ThinCapture.getOptions();
 
         JPanel enableRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
         enableRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));

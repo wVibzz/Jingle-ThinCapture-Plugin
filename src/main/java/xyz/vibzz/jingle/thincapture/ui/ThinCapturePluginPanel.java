@@ -43,10 +43,22 @@ public class ThinCapturePluginPanel {
         generalPanel.setBorder(BorderFactory.createTitledBorder("General"));
         generalPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
+        generalPanel.add(buildAmdRow(o));
         generalPanel.add(buildThinBTSizeRow(o));
         generalPanel.add(buildFpsRow(o));
 
         return generalPanel;
+    }
+
+    private JPanel buildAmdRow(ThinCaptureOptions o) {
+        JCheckBox amdBox = new JCheckBox("AMD Compatibility Mode");
+        amdBox.setSelected(o.amdCompatMode);
+        amdBox.addActionListener(a -> o.amdCompatMode = amdBox.isSelected());
+
+        JLabel desc = new JLabel("Enable if captures show black on AMD. [GLOBAL TOGGLE]");
+        desc.setFont(desc.getFont().deriveFont(Font.ITALIC, 11f));
+
+        return createRow(amdBox, desc);
     }
 
     private JPanel buildThinBTSizeRow(ThinCaptureOptions o) {
@@ -157,6 +169,17 @@ public class ThinCapturePluginPanel {
             RegionSelector.editOnScreen(current, onRegionSelected);
         });
 
+        JButton applyBtn = createSmallButton("Apply", a -> {
+            c.screenX = intFrom(ox, 0);
+            c.screenY = intFrom(oy, 0);
+            c.screenW = Math.max(1, intFrom(ow, 200));
+            c.screenH = Math.max(1, intFrom(oh, 200));
+            ox.setText(String.valueOf(c.screenX));
+            oy.setText(String.valueOf(c.screenY));
+            ow.setText(String.valueOf(c.screenW));
+            oh.setText(String.valueOf(c.screenH));
+        });
+
         JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -171,11 +194,13 @@ public class ThinCapturePluginPanel {
         row.add(oh);
         row.add(selectBtn);
         row.add(editBtn);
+        row.add(applyBtn);
 
         return row;
     }
 
     private JPanel buildMCRegionRow(CaptureConfig c) {
+        ThinCaptureOptions o = ThinCapture.getOptions();
         JTextField rx = field(c.captureX), ry = field(c.captureY), rw = field(c.captureW), rh = field(c.captureH);
 
         Consumer<Rectangle> onRegionSelected = r -> {
@@ -196,6 +221,17 @@ public class ThinCapturePluginPanel {
             RegionSelector.editOnMCWindow(current, onRegionSelected);
         });
 
+        JButton applyBtn = createSmallButton("Apply", a -> {
+            c.captureX = clamp(intFrom(rx, 0), 0, o.thinBTWidth - 1);
+            c.captureY = clamp(intFrom(ry, 0), 0, o.thinBTHeight - 1);
+            c.captureW = clamp(Math.max(1, intFrom(rw, 200)), 1, o.thinBTWidth - c.captureX);
+            c.captureH = clamp(Math.max(1, intFrom(rh, 200)), 1, o.thinBTHeight - c.captureY);
+            rx.setText(String.valueOf(c.captureX));
+            ry.setText(String.valueOf(c.captureY));
+            rw.setText(String.valueOf(c.captureW));
+            rh.setText(String.valueOf(c.captureH));
+        });
+
         JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -210,6 +246,7 @@ public class ThinCapturePluginPanel {
         row.add(rh);
         row.add(selectBtn);
         row.add(editBtn);
+        row.add(applyBtn);
 
         return row;
     }
