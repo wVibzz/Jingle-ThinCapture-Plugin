@@ -24,6 +24,8 @@ public class BackgroundFrame extends JFrame {
     private final WinDef.HWND frameHwnd;
     private boolean currentlyShowing = false;
     private BufferedImage bgImage = null;
+    private boolean useImage = true;
+    private Color bgColor = Color.BLACK;
 
     public BackgroundFrame() {
         super("ThinCapture Background");
@@ -41,6 +43,16 @@ public class BackgroundFrame extends JFrame {
 
     public WinDef.HWND getHwnd() {
         return frameHwnd;
+    }
+
+    public void setUseImage(boolean useImage) {
+        this.useImage = useImage;
+        repaint();
+    }
+
+    public void setBgColor(Color color) {
+        this.bgColor = color != null ? color : Color.BLACK;
+        repaint();
     }
 
     public void loadImage(String path) {
@@ -94,10 +106,10 @@ public class BackgroundFrame extends JFrame {
 
     @Override
     public void paint(Graphics g) {
-        if (bgImage != null) {
+        if (useImage && bgImage != null) {
             g.drawImage(bgImage, 0, 0, getWidth(), getHeight(), null);
         } else {
-            g.setColor(Color.BLACK);
+            g.setColor(bgColor);
             g.fillRect(0, 0, getWidth(), getHeight());
         }
     }

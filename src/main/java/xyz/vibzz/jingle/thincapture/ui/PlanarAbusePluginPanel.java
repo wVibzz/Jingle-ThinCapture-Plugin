@@ -15,441 +15,247 @@ import java.util.stream.IntStream;
 public class PlanarAbusePluginPanel {
     public final JPanel mainPanel;
     private final JPanel capturesContainer;
+    private JLabel sizeLabel;
 
     public PlanarAbusePluginPanel() {
         mainPanel = new JPanel();
         mainPanel.setLayout(new BoxLayout(mainPanel, BoxLayout.Y_AXIS));
         mainPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
-
         mainPanel.add(buildGeneralPanel());
         mainPanel.add(Box.createRigidArea(new Dimension(0, 4)));
-
         capturesContainer = new JPanel();
         capturesContainer.setLayout(new BoxLayout(capturesContainer, BoxLayout.Y_AXIS));
         capturesContainer.setAlignmentX(Component.LEFT_ALIGNMENT);
         mainPanel.add(capturesContainer);
-
         mainPanel.add(buildAddButtonRow());
         mainPanel.add(Box.createVerticalGlue());
-
         rebuildCaptures();
     }
 
     private JPanel buildGeneralPanel() {
         ThinCaptureOptions o = ThinCapture.getOptions();
-
-        JPanel generalPanel = new JPanel();
-        generalPanel.setLayout(new BoxLayout(generalPanel, BoxLayout.Y_AXIS));
-        generalPanel.setBorder(BorderFactory.createTitledBorder("General"));
-        generalPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        generalPanel.add(buildPlanarSizeRow(o));
-        generalPanel.add(buildFpsRow(o));
-
-        return generalPanel;
+        JPanel p = new JPanel();
+        p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS));
+        p.setBorder(BorderFactory.createTitledBorder("General"));
+        p.setAlignmentX(Component.LEFT_ALIGNMENT);
+        p.add(buildSizeRow());
+        p.add(buildFpsRow(o));
+        return p;
     }
 
-    private JPanel buildPlanarSizeRow(ThinCaptureOptions o) {
-        JTextField planarWField = new JTextField(String.valueOf(o.planarAbuseWidth), 4);
-        JTextField planarHField = new JTextField(String.valueOf(o.planarAbuseHeight), 4);
-
-        JButton planarApply = createSmallButton("Apply", a -> {
-            o.planarAbuseWidth = intFrom(planarWField, 1920);
-            o.planarAbuseHeight = intFrom(planarHField, 300);
-            planarWField.setText(String.valueOf(o.planarAbuseWidth));
-            planarHField.setText(String.valueOf(o.planarAbuseHeight));
-        });
-
-        JLabel desc = new JLabel("Must match your Planar Abuse size in the Resizing script.");
+    private JPanel buildSizeRow() {
+        sizeLabel = new JLabel();
+        refreshSizeLabel();
+        JLabel desc = new JLabel("(synced from Resizing script)");
         desc.setFont(desc.getFont().deriveFont(Font.ITALIC, 11f));
+        return createRow(new JLabel("Planar Abuse size:"), sizeLabel, desc);
+    }
 
-        return createRow(
-                new JLabel("Planar Abuse size:"), planarWField, new JLabel("×"), planarHField,
-                planarApply, desc
-        );
+    private void refreshSizeLabel() {
+        if (sizeLabel == null) return;
+        sizeLabel.setText(ThinCapture.getEffectivePlanarWidth() + " \u00d7 " + ThinCapture.getEffectivePlanarHeight());
     }
 
     private JPanel buildFpsRow(ThinCaptureOptions o) {
-        JTextField fpsField = new JTextField(String.valueOf(o.planarAbuseFpsLimit), 4);
-        fpsField.getDocument().addDocumentListener(docListener(() -> {
-            o.planarAbuseFpsLimit = clamp(intFrom(fpsField, 30), 5, 240);
+        JTextField f = new JTextField(String.valueOf(o.planarAbuseFpsLimit), 4);
+        f.getDocument().addDocumentListener(docListener(() -> {
+            o.planarAbuseFpsLimit = clamp(intFrom(f, 30), 5, 240);
             ThinCapture.updateFpsLimit();
         }));
-
-        return createRow(new JLabel("FPS limit:"), fpsField);
+        return createRow(new JLabel("FPS limit:"), f);
     }
 
     private JPanel buildAddButtonRow() {
-        JPanel addRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
-        addRow.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        JButton addBtn = new JButton("+ Add Capture");
-        addBtn.addActionListener(a -> {
-            String name = JOptionPane.showInputDialog(mainPanel, "Capture name:", "New Capture");
-            if (name != null && !name.trim().isEmpty()) {
-                ThinCapture.addPlanarCapture(name.trim());
-                rebuildCaptures();
-            }
+        JPanel r = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
+        r.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JButton b = new JButton("+ Add Capture");
+        b.addActionListener(a -> {
+            String n = JOptionPane.showInputDialog(mainPanel, "Capture name:", "New Capture");
+            if (n != null && !n.trim().isEmpty()) { ThinCapture.addPlanarCapture(n.trim()); rebuildCaptures(); }
         });
-        addRow.add(addBtn);
-
-        return addRow;
+        r.add(b);
+        return r;
     }
 
-    // ===== Capture Panel =====
-
     private JPanel buildCapturePanel(int index) {
-        ThinCaptureOptions o = ThinCapture.getOptions();
-        CaptureConfig c = o.planarAbuseCaptures.get(index);
-
-        JPanel section = new JPanel();
-        section.setLayout(new BoxLayout(section, BoxLayout.Y_AXIS));
-        section.setBorder(BorderFactory.createTitledBorder(c.name));
-        section.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        section.add(buildCaptureTopRow(index, c));
-        section.add(buildMonitorRow(c));
-        section.add(buildMCRegionRow(c));
-        section.add(buildTransparencySection(c));
-
-        return section;
+        CaptureConfig c = ThinCapture.getOptions().planarAbuseCaptures.get(index);
+        JPanel s = new JPanel();
+        s.setLayout(new BoxLayout(s, BoxLayout.Y_AXIS));
+        s.setBorder(BorderFactory.createTitledBorder(c.name));
+        s.setAlignmentX(Component.LEFT_ALIGNMENT);
+        s.add(buildCaptureTopRow(index, c));
+        s.add(buildMonitorRow(c));
+        s.add(buildMCRegionRow(c));
+        s.add(buildTransparencySection(c));
+        return s;
     }
 
     private JPanel buildCaptureTopRow(int index, CaptureConfig c) {
-        JCheckBox enableBox = new JCheckBox("Enabled");
-        enableBox.setSelected(c.enabled);
-        enableBox.addActionListener(a -> c.enabled = enableBox.isSelected());
-
-        JButton renameBtn = createSmallButton("Rename", a -> {
-            String newName = JOptionPane.showInputDialog(mainPanel, "New name:", c.name);
-            if (newName != null && !newName.trim().isEmpty()) {
-                ThinCapture.renamePlanarCapture(index, newName.trim());
-                rebuildCaptures();
-            }
+        JCheckBox en = new JCheckBox("Enabled");
+        en.setSelected(c.enabled);
+        en.addActionListener(a -> c.enabled = en.isSelected());
+        JButton ren = createSmallButton("Rename", a -> {
+            String n = JOptionPane.showInputDialog(mainPanel, "New name:", c.name);
+            if (n != null && !n.trim().isEmpty()) { ThinCapture.renamePlanarCapture(index, n.trim()); rebuildCaptures(); }
         });
-
-        JButton removeBtn = createRemoveButton("capture \"" + c.name + "\"", () -> {
-            ThinCapture.removePlanarCapture(index);
-            rebuildCaptures();
-        });
-
-        return createRow(enableBox, renameBtn, removeBtn);
+        JButton rem = createRemoveButton("capture \"" + c.name + "\"", () -> { ThinCapture.removePlanarCapture(index); rebuildCaptures(); });
+        return createRow(en, ren, rem);
     }
 
     private JPanel buildMonitorRow(CaptureConfig c) {
         JTextField ox = field(c.screenX), oy = field(c.screenY), ow = field(c.screenW), oh = field(c.screenH);
-
-        Consumer<Rectangle> onRegionSelected = r -> {
-            ox.setText(String.valueOf(r.x));
-            oy.setText(String.valueOf(r.y));
-            ow.setText(String.valueOf(r.width));
-            oh.setText(String.valueOf(r.height));
-            c.screenX = r.x;
-            c.screenY = r.y;
-            c.screenW = r.width;
-            c.screenH = r.height;
-        };
-
-        JButton selectBtn = createSmallButton("Select", a -> RegionSelector.selectOnScreen(onRegionSelected));
-
-        JButton editBtn = createSmallButton("Edit", a -> {
-            Rectangle current = new Rectangle(intFrom(ox, 0), intFrom(oy, 0), intFrom(ow, 200), intFrom(oh, 200));
-            RegionSelector.editOnScreen(current, onRegionSelected);
-        });
-
-        JButton applyBtn = createSmallButton("Apply", a -> {
-            c.screenX = intFrom(ox, 0);
-            c.screenY = intFrom(oy, 0);
-            c.screenW = Math.max(1, intFrom(ow, 200));
-            c.screenH = Math.max(1, intFrom(oh, 200));
-            ox.setText(String.valueOf(c.screenX));
-            oy.setText(String.valueOf(c.screenY));
-            ow.setText(String.valueOf(c.screenW));
-            oh.setText(String.valueOf(c.screenH));
-        });
-
+        Consumer<Rectangle> cb = r -> { ox.setText(""+r.x); oy.setText(""+r.y); ow.setText(""+r.width); oh.setText(""+r.height); c.screenX=r.x; c.screenY=r.y; c.screenW=r.width; c.screenH=r.height; };
+        JButton sel = createSmallButton("Select", a -> RegionSelector.selectOnScreen(cb));
+        JButton edt = createSmallButton("Edit", a -> RegionSelector.editOnScreen(new Rectangle(intFrom(ox,0),intFrom(oy,0),intFrom(ow,200),intFrom(oh,200)), cb));
+        JButton app = createSmallButton("Apply", a -> { c.screenX=intFrom(ox,0); c.screenY=intFrom(oy,0); c.screenW=Math.max(1,intFrom(ow,200)); c.screenH=Math.max(1,intFrom(oh,200)); ox.setText(""+c.screenX); oy.setText(""+c.screenY); ow.setText(""+c.screenW); oh.setText(""+c.screenH); });
         JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
         row.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
-        row.add(new JLabel("Monitor  X:"));
-        row.add(ox);
-        row.add(new JLabel("Y:"));
-        row.add(oy);
-        row.add(new JLabel("W:"));
-        row.add(ow);
-        row.add(new JLabel("H:"));
-        row.add(oh);
-        row.add(selectBtn);
-        row.add(editBtn);
-        row.add(applyBtn);
-
+        row.add(new JLabel("Monitor  X:")); row.add(ox); row.add(new JLabel("Y:")); row.add(oy);
+        row.add(new JLabel("W:")); row.add(ow); row.add(new JLabel("H:")); row.add(oh);
+        row.add(sel); row.add(edt); row.add(app);
         return row;
     }
 
     private JPanel buildMCRegionRow(CaptureConfig c) {
-        ThinCaptureOptions o = ThinCapture.getOptions();
         JTextField rx = field(c.captureX), ry = field(c.captureY), rw = field(c.captureW), rh = field(c.captureH);
-
-        Consumer<Rectangle> onRegionSelected = r -> {
-            rx.setText(String.valueOf(r.x));
-            ry.setText(String.valueOf(r.y));
-            rw.setText(String.valueOf(r.width));
-            rh.setText(String.valueOf(r.height));
-            c.captureX = r.x;
-            c.captureY = r.y;
-            c.captureW = r.width;
-            c.captureH = r.height;
-        };
-
-        JButton selectBtn = createSmallButton("Select", a -> RegionSelector.selectOnMCWindow(onRegionSelected));
-
-        JButton editBtn = createSmallButton("Edit", a -> {
-            Rectangle current = new Rectangle(intFrom(rx, 0), intFrom(ry, 0), intFrom(rw, 200), intFrom(rh, 200));
-            RegionSelector.editOnMCWindow(current, onRegionSelected);
+        Consumer<Rectangle> cb = r -> { rx.setText(""+r.x); ry.setText(""+r.y); rw.setText(""+r.width); rh.setText(""+r.height); c.captureX=r.x; c.captureY=r.y; c.captureW=r.width; c.captureH=r.height; };
+        JButton sel = createSmallButton("Select", a -> RegionSelector.selectOnMCWindow(cb));
+        JButton edt = createSmallButton("Edit", a -> RegionSelector.editOnMCWindow(new Rectangle(intFrom(rx,0),intFrom(ry,0),intFrom(rw,200),intFrom(rh,200)), cb));
+        JButton app = createSmallButton("Apply", a -> {
+            int ew=ThinCapture.getEffectivePlanarWidth(), eh=ThinCapture.getEffectivePlanarHeight();
+            c.captureX=clamp(intFrom(rx,0),0,ew-1); c.captureY=clamp(intFrom(ry,0),0,eh-1);
+            c.captureW=clamp(Math.max(1,intFrom(rw,200)),1,ew-c.captureX); c.captureH=clamp(Math.max(1,intFrom(rh,200)),1,eh-c.captureY);
+            rx.setText(""+c.captureX); ry.setText(""+c.captureY); rw.setText(""+c.captureW); rh.setText(""+c.captureH);
         });
-
-        JButton applyBtn = createSmallButton("Apply", a -> {
-            c.captureX = clamp(intFrom(rx, 0), 0, o.planarAbuseWidth - 1);
-            c.captureY = clamp(intFrom(ry, 0), 0, o.planarAbuseHeight - 1);
-            c.captureW = clamp(Math.max(1, intFrom(rw, 200)), 1, o.planarAbuseWidth - c.captureX);
-            c.captureH = clamp(Math.max(1, intFrom(rh, 200)), 1, o.planarAbuseHeight - c.captureY);
-            rx.setText(String.valueOf(c.captureX));
-            ry.setText(String.valueOf(c.captureY));
-            rw.setText(String.valueOf(c.captureW));
-            rh.setText(String.valueOf(c.captureH));
-        });
-
         JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
         row.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
-        row.add(new JLabel("MC Region X:"));
-        row.add(rx);
-        row.add(new JLabel("Y:"));
-        row.add(ry);
-        row.add(new JLabel("W:"));
-        row.add(rw);
-        row.add(new JLabel("H:"));
-        row.add(rh);
-        row.add(selectBtn);
-        row.add(editBtn);
-        row.add(applyBtn);
-
+        row.add(new JLabel("MC Region X:")); row.add(rx); row.add(new JLabel("Y:")); row.add(ry);
+        row.add(new JLabel("W:")); row.add(rw); row.add(new JLabel("H:")); row.add(rh);
+        row.add(sel); row.add(edt); row.add(app);
         return row;
     }
 
     private JPanel buildTransparencySection(CaptureConfig c) {
-        ThinCaptureOptions o = ThinCapture.getOptions();
+        JPanel sec = new JPanel();
+        sec.setLayout(new BoxLayout(sec, BoxLayout.Y_AXIS));
+        sec.setBorder(BorderFactory.createTitledBorder("Transparency"));
+        sec.setAlignmentX(Component.LEFT_ALIGNMENT);
+        sec.setMaximumSize(new Dimension(Integer.MAX_VALUE, 100));
 
-        JPanel section = new JPanel();
-        section.setLayout(new BoxLayout(section, BoxLayout.Y_AXIS));
-        section.setBorder(BorderFactory.createTitledBorder("Transparency"));
-        section.setAlignmentX(Component.LEFT_ALIGNMENT);
-        section.setMaximumSize(new Dimension(Integer.MAX_VALUE, 100));
+        JCheckBox tBox = new JCheckBox("Enable (filter white text)");
+        tBox.setSelected(c.textOnly);
+        JLabel tLbl = new JLabel("Threshold:");
+        JTextField tFld = new JTextField(String.valueOf(c.textThreshold), 3);
+        JLabel tNote = new JLabel("[0-255]");
+        tNote.setFont(tNote.getFont().deriveFont(Font.ITALIC, 10f));
+        JPanel r1 = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        r1.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
+        r1.add(tBox); r1.add(Box.createHorizontalStrut(8)); r1.add(tLbl); r1.add(tFld); r1.add(tNote);
+        sec.add(r1);
 
-        // Row 1: Enable checkbox and threshold
-        JCheckBox transparencyBox = new JCheckBox("Enable (filter white text)");
-        transparencyBox.setSelected(c.textOnly);
+        JRadioButton bgT = new JRadioButton("Transparent");
+        JRadioButton bgC = new JRadioButton("Solid color");
+        JRadioButton bgI = new JRadioButton("Image");
+        ButtonGroup bg = new ButtonGroup(); bg.add(bgT); bg.add(bgC); bg.add(bgI);
+        if (c.transparentBg) bgT.setSelected(true);
+        else if (c.bgImagePath != null && !c.bgImagePath.trim().isEmpty()) bgI.setSelected(true);
+        else bgC.setSelected(true);
+        JPanel r2 = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        r2.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
+        r2.add(new JLabel("Background:")); r2.add(bgT); r2.add(bgC); r2.add(bgI);
+        sec.add(r2);
 
-        JLabel threshLabel = new JLabel("Threshold:");
-        JTextField threshField = new JTextField(String.valueOf(c.textThreshold), 3);
-        JLabel threshNote = new JLabel("[0-255]");
-        threshNote.setFont(threshNote.getFont().deriveFont(Font.ITALIC, 10f));
-
-        JPanel row1 = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
-        row1.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
-        row1.add(transparencyBox);
-        row1.add(Box.createHorizontalStrut(8));
-        row1.add(threshLabel);
-        row1.add(threshField);
-        row1.add(threshNote);
-        section.add(row1);
-
-        // Row 2: Background type radio buttons
-        JRadioButton bgTransparentRadio = new JRadioButton("Transparent");
-        JRadioButton bgColorRadio = new JRadioButton("Solid color");
-        JRadioButton bgImageRadio = new JRadioButton("Image");
-        ButtonGroup bgGroup = new ButtonGroup();
-        bgGroup.add(bgTransparentRadio);
-        bgGroup.add(bgColorRadio);
-        bgGroup.add(bgImageRadio);
-
-        if (c.transparentBg) {
-            bgTransparentRadio.setSelected(true);
-        } else if (c.bgImagePath != null && !c.bgImagePath.trim().isEmpty()) {
-            bgImageRadio.setSelected(true);
-        } else {
-            bgColorRadio.setSelected(true);
-        }
-
-        JPanel row2 = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
-        row2.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
-        row2.add(new JLabel("Background:"));
-        row2.add(bgTransparentRadio);
-        row2.add(bgColorRadio);
-        row2.add(bgImageRadio);
-        section.add(row2);
-
-        // Row 3: Color/Image fields and Apply button
-        JLabel colorLabel = new JLabel("Hex:");
-        JTextField bgField = new JTextField(c.bgColor, 7);
-        JTextField bgImageField = new JTextField(c.bgImagePath, 14);
-
-        JButton browseBtn = createSmallButton("Browse...", a -> {
-            JFileChooser chooser = new JFileChooser();
-            chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
-                    "Images (png, jpg, bmp, gif)", "png", "jpg", "jpeg", "bmp", "gif"
-            ));
-            if (chooser.showOpenDialog(mainPanel) == JFileChooser.APPROVE_OPTION) {
-                String path = chooser.getSelectedFile().getAbsolutePath();
-                bgImageField.setText(path);
-                c.bgImagePath = path;
-            }
+        JLabel cLbl = new JLabel("Hex:");
+        JTextField cFld = new JTextField(c.bgColor, 7);
+        JTextField iFld = new JTextField(c.bgImagePath, 14);
+        JButton brw = createSmallButton("Browse...", a -> {
+            JFileChooser ch = new JFileChooser();
+            ch.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Images (png, jpg, bmp, gif)", "png", "jpg", "jpeg", "bmp", "gif"));
+            if (ch.showOpenDialog(mainPanel) == JFileChooser.APPROVE_OPTION) { String p = ch.getSelectedFile().getAbsolutePath(); iFld.setText(p); c.bgImagePath = p; }
+        });
+        JButton clr = createSmallButton("Clear", a -> { iFld.setText(""); c.bgImagePath = ""; });
+        JButton app = createSmallButton("Apply", a -> {
+            int ew=ThinCapture.getEffectivePlanarWidth(), eh=ThinCapture.getEffectivePlanarHeight();
+            c.captureX=clamp(c.captureX,0,ew-1); c.captureY=clamp(c.captureY,0,eh-1);
+            c.captureW=clamp(c.captureW,1,ew-c.captureX); c.captureH=clamp(c.captureH,1,eh-c.captureY);
+            c.textThreshold=clamp(intFrom(tFld,200),0,255); tFld.setText(""+c.textThreshold);
         });
 
-        JButton clearImgBtn = createSmallButton("Clear", a -> {
-            bgImageField.setText("");
-            c.bgImagePath = "";
-        });
+        JPanel r3 = new JPanel(new BorderLayout());
+        r3.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
+        JPanel r3L = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        r3L.add(Box.createHorizontalStrut(16)); r3L.add(cLbl); r3L.add(cFld);
+        r3L.add(Box.createHorizontalStrut(12)); r3L.add(iFld); r3L.add(brw); r3L.add(clr);
+        JPanel r3R = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 2));
+        r3R.add(app);
+        r3.add(r3L, BorderLayout.WEST); r3.add(r3R, BorderLayout.EAST);
+        sec.add(r3);
 
-        JButton applyBtn = createSmallButton("Apply", a -> {
-            c.captureX = clamp(c.captureX, 0, o.planarAbuseWidth - 1);
-            c.captureY = clamp(c.captureY, 0, o.planarAbuseHeight - 1);
-            c.captureW = clamp(c.captureW, 1, o.planarAbuseWidth - c.captureX);
-            c.captureH = clamp(c.captureH, 1, o.planarAbuseHeight - c.captureY);
-            c.textThreshold = clamp(intFrom(threshField, 200), 0, 255);
-            threshField.setText(String.valueOf(c.textThreshold));
-        });
-
-        JPanel row3 = new JPanel(new BorderLayout());
-        row3.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
-
-        JPanel row3Left = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
-        row3Left.add(Box.createHorizontalStrut(16));
-        row3Left.add(colorLabel);
-        row3Left.add(bgField);
-        row3Left.add(Box.createHorizontalStrut(12));
-        row3Left.add(bgImageField);
-        row3Left.add(browseBtn);
-        row3Left.add(clearImgBtn);
-
-        JPanel row3Right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 2));
-        row3Right.add(applyBtn);
-
-        row3.add(row3Left, BorderLayout.WEST);
-        row3.add(row3Right, BorderLayout.EAST);
-        section.add(row3);
-
-        // State management
-        Runnable updateState = () -> {
-            boolean on = transparencyBox.isSelected();
-            threshLabel.setEnabled(on);
-            threshField.setEnabled(on);
-            threshNote.setEnabled(on);
-            bgTransparentRadio.setEnabled(on);
-            bgColorRadio.setEnabled(on);
-            bgImageRadio.setEnabled(on);
-
-            boolean colorOn = on && bgColorRadio.isSelected();
-            boolean imageOn = on && bgImageRadio.isSelected();
-            colorLabel.setEnabled(colorOn);
-            bgField.setEnabled(colorOn);
-            bgImageField.setEnabled(imageOn);
-            browseBtn.setEnabled(imageOn);
-            clearImgBtn.setEnabled(imageOn);
+        Runnable upd = () -> {
+            boolean on = tBox.isSelected();
+            tLbl.setEnabled(on); tFld.setEnabled(on); tNote.setEnabled(on);
+            bgT.setEnabled(on); bgC.setEnabled(on); bgI.setEnabled(on);
+            cLbl.setEnabled(on && bgC.isSelected()); cFld.setEnabled(on && bgC.isSelected());
+            iFld.setEnabled(on && bgI.isSelected()); brw.setEnabled(on && bgI.isSelected()); clr.setEnabled(on && bgI.isSelected());
         };
+        Runnable sync = () -> { c.textOnly = tBox.isSelected(); c.transparentBg = bgT.isSelected(); if (bgC.isSelected()) c.bgImagePath = ""; };
 
-        Runnable syncConfig = () -> {
-            c.textOnly = transparencyBox.isSelected();
-            c.transparentBg = bgTransparentRadio.isSelected();
-            if (bgColorRadio.isSelected()) {
-                c.bgImagePath = "";
-            }
-        };
+        tBox.addActionListener(a -> { sync.run(); upd.run(); });
+        bgT.addActionListener(a -> { sync.run(); upd.run(); });
+        bgC.addActionListener(a -> { sync.run(); upd.run(); });
+        bgI.addActionListener(a -> { sync.run(); upd.run(); });
+        tFld.getDocument().addDocumentListener(docListener(() -> c.textThreshold = clamp(intFrom(tFld, 200), 0, 255)));
+        cFld.getDocument().addDocumentListener(docListener(() -> c.bgColor = cFld.getText().trim()));
+        iFld.getDocument().addDocumentListener(docListener(() -> c.bgImagePath = iFld.getText().trim()));
+        upd.run();
 
-        transparencyBox.addActionListener(a -> { syncConfig.run(); updateState.run(); });
-        bgTransparentRadio.addActionListener(a -> { syncConfig.run(); updateState.run(); });
-        bgColorRadio.addActionListener(a -> { syncConfig.run(); updateState.run(); });
-        bgImageRadio.addActionListener(a -> { syncConfig.run(); updateState.run(); });
-
-        threshField.getDocument().addDocumentListener(docListener(() ->
-                c.textThreshold = clamp(intFrom(threshField, 200), 0, 255)
-        ));
-        bgField.getDocument().addDocumentListener(docListener(() -> c.bgColor = bgField.getText().trim()));
-        bgImageField.getDocument().addDocumentListener(docListener(() -> c.bgImagePath = bgImageField.getText().trim()));
-
-        updateState.run();
-
-        return section;
+        return sec;
     }
 
     private void rebuildCaptures() {
         capturesContainer.removeAll();
-
         ThinCaptureOptions o = ThinCapture.getOptions();
-
         for (int i = 0; i < o.planarAbuseCaptures.size(); i++) {
             capturesContainer.add(buildCapturePanel(i));
             capturesContainer.add(Box.createRigidArea(new Dimension(0, 4)));
         }
-
         capturesContainer.revalidate();
         capturesContainer.repaint();
     }
 
-    public void onSwitchTo() {
-        rebuildCaptures();
-    }
-
-    // ===== UI Helpers =====
+    public void onSwitchTo() { refreshSizeLabel(); rebuildCaptures(); }
 
     private JPanel createRow(Component... components) {
-        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
-        row.setAlignmentX(Component.LEFT_ALIGNMENT);
-        for (Component c : components) {
-            row.add(c);
-        }
-        return row;
+        JPanel r = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        r.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
+        r.setAlignmentX(Component.LEFT_ALIGNMENT);
+        for (Component c : components) r.add(c);
+        return r;
     }
 
     private JButton createSmallButton(String text, java.awt.event.ActionListener action) {
-        JButton btn = new JButton(text);
-        btn.setMargin(new Insets(1, 6, 1, 6));
-        btn.addActionListener(action);
-        return btn;
+        JButton b = new JButton(text); b.setMargin(new Insets(1,6,1,6)); b.addActionListener(action); return b;
     }
 
     private JButton createRemoveButton(String label, Runnable onConfirm) {
-        JButton removeBtn = new JButton("Remove");
-        removeBtn.setMargin(new Insets(1, 6, 1, 6));
-        removeBtn.setForeground(Color.RED);
-        removeBtn.addActionListener(a -> {
-            int confirm = JOptionPane.showConfirmDialog(mainPanel,
-                    "Remove " + label + "?", "Confirm", JOptionPane.YES_NO_OPTION);
-            if (confirm == JOptionPane.YES_OPTION) {
-                onConfirm.run();
-            }
-        });
-        return removeBtn;
+        JButton b = new JButton("Remove"); b.setMargin(new Insets(1,6,1,6)); b.setForeground(Color.RED);
+        b.addActionListener(a -> { if (JOptionPane.showConfirmDialog(mainPanel, "Remove "+label+"?", "Confirm", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) onConfirm.run(); });
+        return b;
     }
 
-    private static JTextField field(int val) {
-        return new JTextField(String.valueOf(val), 4);
+    private static JTextField field(int v) { return new JTextField(String.valueOf(v), 4); }
+
+    private static int intFrom(JTextField f, int fb) {
+        String t = f.getText().trim(); boolean neg = t.startsWith("-");
+        String n = IntStream.range(0,t.length()).mapToObj(t::charAt).filter(Character::isDigit).map(String::valueOf).collect(Collectors.joining());
+        return n.isEmpty() ? fb : (neg?-1:1)*Integer.parseInt(n);
     }
 
-    private static int intFrom(JTextField f, int fallback) {
-        String t = f.getText().trim();
-        boolean neg = t.startsWith("-");
-        String nums = IntStream.range(0, t.length()).mapToObj(t::charAt)
-                .filter(Character::isDigit).map(String::valueOf).collect(Collectors.joining());
-        return nums.isEmpty() ? fallback : (neg ? -1 : 1) * Integer.parseInt(nums);
-    }
-
-    private static int clamp(int v, int min, int max) {
-        return Math.max(min, Math.min(max, v));
-    }
+    private static int clamp(int v, int min, int max) { return Math.max(min, Math.min(max, v)); }
 
     private static DocumentListener docListener(Runnable r) {
         return new DocumentListener() {

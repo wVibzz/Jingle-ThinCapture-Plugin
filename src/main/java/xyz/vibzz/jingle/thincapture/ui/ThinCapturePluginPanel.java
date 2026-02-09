@@ -15,6 +15,7 @@ import java.util.stream.IntStream;
 public class ThinCapturePluginPanel {
     public final JPanel mainPanel;
     private final JPanel capturesContainer;
+    private JLabel sizeLabel;
 
     public ThinCapturePluginPanel() {
         mainPanel = new JPanel();
@@ -44,7 +45,7 @@ public class ThinCapturePluginPanel {
         generalPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         generalPanel.add(buildAmdRow(o));
-        generalPanel.add(buildThinBTSizeRow(o));
+        generalPanel.add(buildSizeRow());
         generalPanel.add(buildFpsRow(o));
 
         return generalPanel;
@@ -61,24 +62,22 @@ public class ThinCapturePluginPanel {
         return createRow(amdBox, desc);
     }
 
-    private JPanel buildThinBTSizeRow(ThinCaptureOptions o) {
-        JTextField thinWField = new JTextField(String.valueOf(o.thinBTWidth), 4);
-        JTextField thinHField = new JTextField(String.valueOf(o.thinBTHeight), 4);
+    private JPanel buildSizeRow() {
+        sizeLabel = new JLabel();
+        refreshSizeLabel();
 
-        JButton thinApply = createSmallButton("Apply", a -> {
-            o.thinBTWidth = intFrom(thinWField, 280);
-            o.thinBTHeight = intFrom(thinHField, 1000);
-            thinWField.setText(String.valueOf(o.thinBTWidth));
-            thinHField.setText(String.valueOf(o.thinBTHeight));
-        });
-
-        JLabel desc = new JLabel("Must match your Thin BT size in the Resizing script.");
+        JLabel desc = new JLabel("(synced from Resizing script)");
         desc.setFont(desc.getFont().deriveFont(Font.ITALIC, 11f));
 
-        return createRow(
-                new JLabel("Thin BT size:"), thinWField, new JLabel("×"), thinHField,
-                thinApply, desc
-        );
+        return createRow(new JLabel("Thin BT size:"), sizeLabel, desc);
+    }
+
+    private void refreshSizeLabel() {
+        if (sizeLabel != null) {
+            int w = ThinCapture.getEffectiveThinBTWidth();
+            int h = ThinCapture.getEffectiveThinBTHeight();
+            sizeLabel.setText(w + " \u00d7 " + h);
+        }
     }
 
     private JPanel buildFpsRow(ThinCaptureOptions o) {
@@ -200,7 +199,6 @@ public class ThinCapturePluginPanel {
     }
 
     private JPanel buildMCRegionRow(CaptureConfig c) {
-        ThinCaptureOptions o = ThinCapture.getOptions();
         JTextField rx = field(c.captureX), ry = field(c.captureY), rw = field(c.captureW), rh = field(c.captureH);
 
         Consumer<Rectangle> onRegionSelected = r -> {
@@ -222,10 +220,12 @@ public class ThinCapturePluginPanel {
         });
 
         JButton applyBtn = createSmallButton("Apply", a -> {
-            c.captureX = clamp(intFrom(rx, 0), 0, o.thinBTWidth - 1);
-            c.captureY = clamp(intFrom(ry, 0), 0, o.thinBTHeight - 1);
-            c.captureW = clamp(Math.max(1, intFrom(rw, 200)), 1, o.thinBTWidth - c.captureX);
-            c.captureH = clamp(Math.max(1, intFrom(rh, 200)), 1, o.thinBTHeight - c.captureY);
+            int effW = ThinCapture.getEffectiveThinBTWidth();
+            int effH = ThinCapture.getEffectiveThinBTHeight();
+            c.captureX = clamp(intFrom(rx, 0), 0, effW - 1);
+            c.captureY = clamp(intFrom(ry, 0), 0, effH - 1);
+            c.captureW = clamp(Math.max(1, intFrom(rw, 200)), 1, effW - c.captureX);
+            c.captureH = clamp(Math.max(1, intFrom(rh, 200)), 1, effH - c.captureY);
             rx.setText(String.valueOf(c.captureX));
             ry.setText(String.valueOf(c.captureY));
             rw.setText(String.valueOf(c.captureW));
@@ -252,15 +252,12 @@ public class ThinCapturePluginPanel {
     }
 
     private JPanel buildTransparencySection(CaptureConfig c) {
-        ThinCaptureOptions o = ThinCapture.getOptions();
-
         JPanel section = new JPanel();
         section.setLayout(new BoxLayout(section, BoxLayout.Y_AXIS));
         section.setBorder(BorderFactory.createTitledBorder("Transparency"));
         section.setAlignmentX(Component.LEFT_ALIGNMENT);
         section.setMaximumSize(new Dimension(Integer.MAX_VALUE, 100));
 
-        // Row 1: Enable checkbox and threshold
         JCheckBox transparencyBox = new JCheckBox("Enable (filter white text)");
         transparencyBox.setSelected(c.textOnly);
 
@@ -278,7 +275,6 @@ public class ThinCapturePluginPanel {
         row1.add(threshNote);
         section.add(row1);
 
-        // Row 2: Background type radio buttons
         JRadioButton bgTransparentRadio = new JRadioButton("Transparent");
         JRadioButton bgColorRadio = new JRadioButton("Solid color");
         JRadioButton bgImageRadio = new JRadioButton("Image");
@@ -303,7 +299,6 @@ public class ThinCapturePluginPanel {
         row2.add(bgImageRadio);
         section.add(row2);
 
-        // Row 3: Color/Image fields and Apply button
         JLabel colorLabel = new JLabel("Hex:");
         JTextField bgField = new JTextField(c.bgColor, 7);
         JTextField bgImageField = new JTextField(c.bgImagePath, 14);
@@ -326,10 +321,12 @@ public class ThinCapturePluginPanel {
         });
 
         JButton applyBtn = createSmallButton("Apply", a -> {
-            c.captureX = clamp(c.captureX, 0, o.thinBTWidth - 1);
-            c.captureY = clamp(c.captureY, 0, o.thinBTHeight - 1);
-            c.captureW = clamp(c.captureW, 1, o.thinBTWidth - c.captureX);
-            c.captureH = clamp(c.captureH, 1, o.thinBTHeight - c.captureY);
+            int effW = ThinCapture.getEffectiveThinBTWidth();
+            int effH = ThinCapture.getEffectiveThinBTHeight();
+            c.captureX = clamp(c.captureX, 0, effW - 1);
+            c.captureY = clamp(c.captureY, 0, effH - 1);
+            c.captureW = clamp(c.captureW, 1, effW - c.captureX);
+            c.captureH = clamp(c.captureH, 1, effH - c.captureY);
             c.textThreshold = clamp(intFrom(threshField, 200), 0, 255);
             threshField.setText(String.valueOf(c.textThreshold));
         });
@@ -353,7 +350,6 @@ public class ThinCapturePluginPanel {
         row3.add(row3Right, BorderLayout.EAST);
         section.add(row3);
 
-        // State management
         Runnable updateState = () -> {
             boolean on = transparencyBox.isSelected();
             threshLabel.setEnabled(on);
@@ -411,6 +407,7 @@ public class ThinCapturePluginPanel {
     }
 
     public void onSwitchTo() {
+        refreshSizeLabel();
         rebuildCaptures();
     }
 

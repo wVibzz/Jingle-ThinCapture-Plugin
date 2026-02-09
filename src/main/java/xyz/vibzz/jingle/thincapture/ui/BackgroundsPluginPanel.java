@@ -181,7 +181,7 @@ public class BackgroundsPluginPanel {
         section.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         section.add(buildTopRow(index, bg, type));
-        section.add(buildImageRow(index, bg, type));
+        section.add(buildFillRow(index, bg, type));
         section.add(buildPositionRow(index, bg, type));
 
         return section;
@@ -216,7 +216,33 @@ public class BackgroundsPluginPanel {
         return createRow(enableBox, renameBtn, removeBtn);
     }
 
-    private JPanel buildImageRow(int index, BackgroundConfig bg, BgType type) {
+    private JPanel buildFillRow(int index, BackgroundConfig bg, BgType type) {
+        JPanel section = new JPanel();
+        section.setLayout(new BoxLayout(section, BoxLayout.Y_AXIS));
+        section.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        // Row 1: Radio buttons for fill type
+        JRadioButton imageRadio = new JRadioButton("Image");
+        JRadioButton colorRadio = new JRadioButton("Solid color");
+        ButtonGroup fillGroup = new ButtonGroup();
+        fillGroup.add(imageRadio);
+        fillGroup.add(colorRadio);
+
+        if (bg.useImage) {
+            imageRadio.setSelected(true);
+        } else {
+            colorRadio.setSelected(true);
+        }
+
+        JPanel row1 = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        row1.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
+        row1.setAlignmentX(Component.LEFT_ALIGNMENT);
+        row1.add(new JLabel("Fill:"));
+        row1.add(imageRadio);
+        row1.add(colorRadio);
+        section.add(row1);
+
+        // Row 2: Image path + browse/clear
         JTextField bgPathField = new JTextField(bg.imagePath, 18);
 
         JButton browseBtn = createBrowseButton(path -> {
@@ -233,7 +259,63 @@ public class BackgroundsPluginPanel {
             if (frame != null) frame.loadImage("");
         });
 
-        return createRow(new JLabel("Image:"), bgPathField, browseBtn, clearBtn);
+        JPanel row2 = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        row2.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
+        row2.setAlignmentX(Component.LEFT_ALIGNMENT);
+        row2.add(Box.createHorizontalStrut(16));
+        row2.add(new JLabel("Image:"));
+        row2.add(bgPathField);
+        row2.add(browseBtn);
+        row2.add(clearBtn);
+        section.add(row2);
+
+        // Row 3: Color hex field
+        JLabel colorLabel = new JLabel("Hex:");
+        JTextField colorField = new JTextField(bg.bgColor, 7);
+
+        JButton colorApplyBtn = createSmallButton("Apply", a -> {
+            bg.bgColor = colorField.getText().trim();
+            BackgroundFrame frame = getFrameForType(index, type);
+            if (frame != null) frame.setBgColor(parseColor(bg.bgColor));
+        });
+
+        JPanel row3 = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        row3.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
+        row3.setAlignmentX(Component.LEFT_ALIGNMENT);
+        row3.add(Box.createHorizontalStrut(16));
+        row3.add(colorLabel);
+        row3.add(colorField);
+        row3.add(colorApplyBtn);
+        section.add(row3);
+
+        // State management: enable/disable fields based on radio selection
+        Runnable updateState = () -> {
+            boolean isImage = imageRadio.isSelected();
+            bgPathField.setEnabled(isImage);
+            browseBtn.setEnabled(isImage);
+            clearBtn.setEnabled(isImage);
+            colorLabel.setEnabled(!isImage);
+            colorField.setEnabled(!isImage);
+            colorApplyBtn.setEnabled(!isImage);
+        };
+
+        Runnable syncConfig = () -> {
+            bg.useImage = imageRadio.isSelected();
+            BackgroundFrame frame = getFrameForType(index, type);
+            if (frame != null) {
+                frame.setUseImage(bg.useImage);
+                if (!bg.useImage) {
+                    frame.setBgColor(parseColor(bg.bgColor));
+                }
+            }
+        };
+
+        imageRadio.addActionListener(a -> { syncConfig.run(); updateState.run(); });
+        colorRadio.addActionListener(a -> { syncConfig.run(); updateState.run(); });
+
+        updateState.run();
+
+        return section;
     }
 
     private JPanel buildPositionRow(int index, BackgroundConfig bg, BgType type) {
@@ -274,7 +356,14 @@ public class BackgroundsPluginPanel {
             bgHField.setText(String.valueOf(bg.height));
 
             BackgroundFrame frame = getFrameForType(index, type);
-            if (frame != null) frame.loadImage(bg.imagePath);
+            if (frame != null) {
+                frame.positionBackground(bg.x, bg.y, bg.width, bg.height);
+                if (bg.useImage) {
+                    frame.loadImage(bg.imagePath);
+                } else {
+                    frame.setBgColor(parseColor(bg.bgColor));
+                }
+            }
         });
 
         JPanel posRow = new JPanel(new BorderLayout());
@@ -361,6 +450,14 @@ public class BackgroundsPluginPanel {
             }
         });
         return browseBtn;
+    }
+
+    private static Color parseColor(String hex) {
+        try {
+            return Color.decode(hex);
+        } catch (Exception e) {
+            return Color.BLACK;
+        }
     }
 
     private static int intFrom(JTextField f, int fallback) {

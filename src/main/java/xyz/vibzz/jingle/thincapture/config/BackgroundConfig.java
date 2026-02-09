@@ -4,6 +4,8 @@ public class BackgroundConfig {
     public String name = "Background";
     public boolean enabled = false;
     public String imagePath = "";
+    public String bgColor = "#000000";
+    public boolean useImage = true; // true = image mode, false = solid color mode
     public int x = 0;
     public int y = 0;
     public int width = 1920;
