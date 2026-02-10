@@ -2,7 +2,7 @@ Download latest here: https://github.com/wVibzz/Jingle-ThinCapture-Plugin/releas
 
 Setup Video: https://youtu.be/fH3bRDBTciE
 
-EyeSee AMD FIX * More for Jingle: https://github.com/wVibzz/Jingle-ThinCapture-Plugin/releases/tag/Custom_Patch_0.3.1
+EyeSee AMD FIX & More for Jingle: https://github.com/wVibzz/Jingle-ThinCapture-Plugin/releases/tag/Custom_Patch_0.3.1
 
 
 
